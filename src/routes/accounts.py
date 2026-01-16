@@ -122,9 +122,8 @@ async def register_user(
         activation_token = ActivationTokenModel(user_id=new_user.id)
         db.add(activation_token)
 
-        activation_link = request.url_for("activate").include_query_params(
-            token=activation_token.token, email=new_user.email
-        )
+        activation_link = (f"http://test.com/api/v1/accounts/activate/"
+                           f"?token={activation_token.token}")
         background_task.add_task(
             sender.send_activation_email,
             str(new_user.email),
@@ -235,7 +234,7 @@ async def activate_account(
     await db.delete(token_record)
     await db.commit()
 
-    login_url = request.url_for("login")
+    login_url = "http://test.com/api/v1/accounts/login/"
     background_tasker.add_task(
         sender.send_activation_complete_email,
         str(activation_data.email),
@@ -290,7 +289,7 @@ async def request_password_reset_token(
     db.add(reset_token)
     await db.commit()
 
-    reset_link = request.url_for("reset_password_complete").include_query_params(token=reset_token.token)
+    reset_link = f"http://test.com/api/v1/accounts/reset-password/?token={reset_token.token}"
     background_tasks.add_task(
         sender.send_password_reset_email,
         user.email,
@@ -413,7 +412,7 @@ async def reset_password(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while resetting the password."
         )
-    login_url = request.url_for("login")
+    login_url = "http://test.com/api/v1/accounts/login/"
     background_tasks.add_task(
         sender.send_password_reset_complete_email,
         str(data.email),
