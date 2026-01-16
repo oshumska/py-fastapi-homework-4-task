@@ -24,7 +24,7 @@ class ProfileRequestSchema(BaseModel):
     def validate_first_name(cls, v):
         try:
             validate_name(v)
-            return v
+            return v.lower()
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
@@ -33,7 +33,7 @@ class ProfileRequestSchema(BaseModel):
     def validate_last_name(cls, v):
         try:
             validate_name(v)
-            return v
+            return v.lower()
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 

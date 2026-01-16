@@ -1,15 +1,14 @@
-from datetime import timezone, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from sqlalchemy.orm import joinedload
 
 from config import get_jwt_auth_manager, get_s3_storage_client
 from database import UserModel, UserProfileModel, get_db
 from database.models.accounts import GenderEnum, UserGroupEnum
-from exceptions import S3FileUploadError, TokenExpiredError
+from exceptions import S3FileUploadError, TokenExpiredError, InvalidTokenError
 from schemas.profiles import ProfileRequestSchema, ProfileResponseSchema
 from security.http import get_token
 from security.interfaces import JWTAuthManagerInterface
@@ -27,10 +26,12 @@ async def get_current_user(
         decoded_token = jwt_manager.decode_access_token(token)
     except TokenExpiredError:
         raise HTTPException(status_code=401, detail="Token has expired.")
+    except InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token.")
     user_id = decoded_token.get("user_id")
     if user_id is None:
         raise HTTPException(status_code=401, detail="Token is invalid")
-    user = await db.execute(select(UserModel).where(UserModel.id == user_id))
+    user = await db.execute(select(UserModel).options(joinedload(UserModel.group)).where(UserModel.id == user_id))
     user = user.scalar_one_or_none()
     if user:
         return user
@@ -48,7 +49,7 @@ async def user_profile_creation(
 ):
     if current_user.id != user_id and not current_user.has_group(UserGroupEnum.ADMIN):
         raise HTTPException(status_code=403, detail="You don't have permission to edit this profile.")
-    result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+    result = await db.execute(select(UserModel).options(joinedload(UserModel.profile)).where(UserModel.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or not active.")
@@ -59,10 +60,9 @@ async def user_profile_creation(
     else:
         gender = GenderEnum.WOMAN
 
-    avatar_byte_data = await profile_data.avatar.read()
-    avatar_path = f"avatars/{user_id}_{profile_data.avatar.filename}"
-
     try:
+        avatar_byte_data = await profile_data.avatar.read()
+        avatar_path = f"avatars/{user_id}_{profile_data.avatar.filename}"
         await s3_client.upload_file(file_name=avatar_path, file_data=avatar_byte_data)
     except S3FileUploadError:
         raise HTTPException(status_code=500, detail="Failed to upload avatar. Please try again later.")
