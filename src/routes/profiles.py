@@ -1,14 +1,15 @@
 from datetime import timezone, datetime, timedelta
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+
 
 from config import get_jwt_auth_manager, get_s3_storage_client
 from database import UserModel, UserProfileModel, get_db
 from database.models.accounts import GenderEnum, UserGroupEnum
-from exceptions import S3FileUploadError
+from exceptions import S3FileUploadError, TokenExpiredError
 from schemas.profiles import ProfileRequestSchema, ProfileResponseSchema
 from security.http import get_token
 from security.interfaces import JWTAuthManagerInterface
@@ -22,26 +23,25 @@ async def get_current_user(
         jwt_manager: JWTAuthManagerInterface = Depends(get_jwt_auth_manager),
         db: AsyncSession = Depends(get_db),
 ) -> UserModel:
-    decoded_token = jwt_manager.decode_access_token(token)
+    try:
+        decoded_token = jwt_manager.decode_access_token(token)
+    except TokenExpiredError:
+        raise HTTPException(status_code=401, detail="Token has expired.")
     user_id = decoded_token.get("user_id")
     if user_id is None:
         raise HTTPException(status_code=401, detail="Token is invalid")
-    exp = decoded_token.get("exp")
-    exp_date = datetime.fromtimestamp(exp, tz=timezone.utc)
-    if exp is None or exp_date < datetime.now(timezone.utc):
-        raise HTTPException(status_code=401, detail="Token has expired")
     user = await db.execute(select(UserModel).where(UserModel.id == user_id))
     user = user.scalar_one_or_none()
     if user:
         return user
     else:
-        raise HTTPException(status_code=401, detail="Token is invalid")
+        raise HTTPException(status_code=401, detail="User not found or not active.")
 
 
 @router.post("/users/{user_id}/profile/", response_model=ProfileResponseSchema, status_code=201)
 async def user_profile_creation(
         user_id: int,
-        profile_data: ProfileRequestSchema,
+        profile_data: Annotated[ProfileRequestSchema, Depends(ProfileRequestSchema.as_form)],
         db: AsyncSession = Depends(get_db),
         current_user: UserModel = Depends(get_current_user),
         s3_client: S3StorageInterface = Depends(get_s3_storage_client)
@@ -51,7 +51,7 @@ async def user_profile_creation(
     result = await db.execute(select(UserModel).where(UserModel.id == user_id))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found or not active")
+        raise HTTPException(status_code=401, detail="User not found or not active.")
     if user.profile:
         raise HTTPException(status_code=400, detail="User already has a profile.")
     if profile_data.gender.lower() == "man":

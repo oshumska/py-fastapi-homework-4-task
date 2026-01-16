@@ -68,11 +68,30 @@ class ProfileRequestSchema(BaseModel):
     @classmethod
     def validate_info(cls, info: str):
         if len(info) == 0:
-            raise HTTPException(status_code=422, detail="Cannot be empty or consist only of spaces.")
+            raise HTTPException(status_code=422, detail="Info field cannot be empty or contain only spaces.")
         for char in info:
             if char != " ":
                 return info
-        raise HTTPException(status_code=422, detail="Cannot be empty or consist only of spaces.")
+        raise HTTPException(status_code=422, detail="Info field cannot be empty or contain only spaces.")
+
+    @classmethod
+    def as_form(
+             cls,
+            first_name: str = Form(...),
+            last_name: str = Form(...),
+            gender: str = Form(...),
+            date_of_birth: date = Form(...),
+            info: str = Form(...),
+            avatar: UploadFile = File(...)
+    ) -> "ProfileRequestSchema":
+        return cls(
+            first_name=first_name,
+            last_name=last_name,
+            gender=gender,
+            date_of_birth=date_of_birth,
+            info=info,
+            avatar=avatar
+        )
 
 
 class ProfileResponseSchema(BaseModel):
