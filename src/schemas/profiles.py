@@ -76,13 +76,13 @@ class ProfileRequestSchema(BaseModel):
 
     @classmethod
     def as_form(
-             cls,
-            first_name: str = Form(...),
-            last_name: str = Form(...),
-            gender: str = Form(...),
-            date_of_birth: date = Form(...),
-            info: str = Form(...),
-            avatar: UploadFile = File(...)
+        cls,
+        first_name: str = Form(...),
+        last_name: str = Form(...),
+        gender: str = Form(...),
+        date_of_birth: date = Form(...),
+        info: str = Form(...),
+        avatar: UploadFile = File(...)
     ) -> "ProfileRequestSchema":
         return cls(
             first_name=first_name,
