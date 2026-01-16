@@ -68,6 +68,7 @@ router = APIRouter()
 )
 async def register_user(
         user_data: UserRegistrationRequestSchema,
+        background_task: BackgroundTasks,
         request: Request,
         db: AsyncSession = Depends(get_db),
         sender: EmailSenderInterface = Depends(get_accounts_email_notificator)
@@ -121,8 +122,7 @@ async def register_user(
         activation_token = ActivationTokenModel(user_id=new_user.id)
         db.add(activation_token)
 
-        background_task = BackgroundTasks()
-        activation_link = request.url_for("reset_password_complete").include_query_params(
+        activation_link = request.url_for("activate").include_query_params(
             token=activation_token.token, email=new_user.email
         )
         background_task.add_task(
@@ -146,6 +146,7 @@ async def register_user(
 @router.post(
     "/activate/",
     response_model=MessageResponseSchema,
+    name="activate",
     summary="Activate User Account",
     description="Activate a user's account using their email and activation token.",
     status_code=status.HTTP_200_OK,
@@ -176,6 +177,7 @@ async def register_user(
 )
 async def activate_account(
         activation_data: UserActivationRequestSchema,
+        background_tasker: BackgroundTasks,
         request: Request,
         db: AsyncSession = Depends(get_db),
         sender: EmailSenderInterface = Depends(get_accounts_email_notificator)
@@ -233,7 +235,6 @@ async def activate_account(
     await db.delete(token_record)
     await db.commit()
 
-    background_tasker = BackgroundTasks()
     login_url = request.url_for("login")
     background_tasker.add_task(
         sender.send_activation_complete_email,
@@ -256,6 +257,7 @@ async def activate_account(
 )
 async def request_password_reset_token(
         data: PasswordResetRequestSchema,
+        background_tasks: BackgroundTasks,
         request: Request,
         db: AsyncSession = Depends(get_db),
         sender: EmailSenderInterface = Depends(get_accounts_email_notificator)
@@ -288,7 +290,6 @@ async def request_password_reset_token(
     db.add(reset_token)
     await db.commit()
 
-    background_tasks = BackgroundTasks()
     reset_link = request.url_for("reset_password_complete").include_query_params(token=reset_token.token)
     background_tasks.add_task(
         sender.send_password_reset_email,
@@ -347,6 +348,7 @@ async def request_password_reset_token(
 )
 async def reset_password(
         data: PasswordResetCompleteRequestSchema,
+        background_tasks: BackgroundTasks,
         request: Request,
         db: AsyncSession = Depends(get_db),
         sender: EmailSenderInterface = Depends(get_accounts_email_notificator)
@@ -412,7 +414,6 @@ async def reset_password(
             detail="An error occurred while resetting the password."
         )
     login_url = request.url_for("login")
-    background_tasks = BackgroundTasks()
     background_tasks.add_task(
         sender.send_password_reset_complete_email,
         str(data.email),
